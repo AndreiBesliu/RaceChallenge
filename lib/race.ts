@@ -35,7 +35,17 @@ export function sample(lane:Lane,d:number):Sample{
 export type Car={id:string;name:string;lane:number;tyre:string;distance:number;speed:number;respawn:number;grace:number;crashes:number;lapStart:number;lastLap:number;bestLap:number;finished:number|null;input:number};
 export type Race={track:string;cars:Car[];time:number;countdown:number;target:number;status:'ready'|'countdown'|'racing'|'finished';winner:string|null;collisionCooldown:number;extra:boolean;reason?:string};
 export function newRace(track:string,players:{id:string;name:string;lane:number;tyre:string}[]):Race{return {track,cars:players.map(p=>({...p,distance:0,speed:0,respawn:0,grace:0,crashes:0,lapStart:0,lastLap:0,bestLap:0,finished:null,input:0})),time:0,countdown:3,target:8,status:'countdown',winner:null,collisionCooldown:0,extra:false};}
-export function limitAt(track:string,car:Car,ahead=0){const p=sample(lanesFor(track)[car.lane],car.distance+ahead),tyre=TYRES.find(t=>t.id===car.tyre)||TYRES[1];return Math.min(tyre.max,Math.sqrt(125*tyre.grip/Math.max(.001,p.k)));}
+// Arcade grip: use a short contact window instead of a single spline sample.
+// The curvature cap prevents tiny inside-lane spline spikes from forcing crawl speeds.
+const LATERAL_GRIP=180;
+const MAX_GAMEPLAY_CURVATURE=1/32;
+const CORNER_SPEED_TOLERANCE=1.06;
+export function limitAt(track:string,car:Car,ahead=0){
+ const lane=lanesFor(track)[car.lane],tyre=TYRES.find(t=>t.id===car.tyre)||TYRES[1];
+ let curvature=0;for(const offset of [-12,-6,0,6,12])curvature+=sample(lane,car.distance+ahead+offset).k;
+ curvature=Math.min(MAX_GAMEPLAY_CURVATURE,Math.max(.001,curvature/5));
+ return Math.min(tyre.max,Math.sqrt(LATERAL_GRIP*tyre.grip/curvature));
+}
 export function botInput(r:Race,c:Car){const target=Math.min(limitAt(r.track,c),limitAt(r.track,c,22),limitAt(r.track,c,45))*.88;return c.speed>target?-1:1;}
 export function step(r:Race,dt:number){
  if(r.status==='finished'||r.status==='ready')return;
@@ -46,7 +56,7 @@ export function step(r:Race,dt:number){
   if(c.respawn>0){c.respawn=Math.max(0,c.respawn-dt);c.speed=0;continue;}
   c.grace=Math.max(0,c.grace-dt);const t=TYRES.find(t=>t.id===c.tyre)||TYRES[1];
   c.speed=Math.max(0,Math.min(t.max,c.speed+(c.input===-1?-205:c.input===1?t.accel:-34)*dt));
-  if(c.speed>limitAt(r.track,c)*1.035&&c.grace<=0){c.respawn=1;c.crashes++;c.speed=0;c.grace=.25;continue;}
+  if(c.speed>limitAt(r.track,c)*CORNER_SPEED_TOLERANCE&&c.grace<=0){c.respawn=1;c.crashes++;c.speed=0;c.grace=.25;continue;}
   const prev=c.distance;c.distance+=c.speed*dt;const len=lanes[c.lane].length;
   if(Math.floor(c.distance/len)>Math.floor(prev/len)){
    const crossing=r.time-(c.distance-Math.floor(c.distance/len)*len)/Math.max(1,c.speed);c.lastLap=crossing-c.lapStart;c.lapStart=crossing;c.bestLap=c.bestLap?Math.min(c.bestLap,c.lastLap):c.lastLap;

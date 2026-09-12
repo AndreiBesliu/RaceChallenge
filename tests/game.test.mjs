@@ -85,3 +85,11 @@ test('Two cars colliding at a figure-eight intersection both respawn',()=>{
  assert.ok(closest.d<17);r.cars[0].distance=closest.a.d;r.cars[1].distance=closest.b.d;for(const c of r.cars)c.speed=20;step(r,1/120);assert.ok(r.cars.every(c=>c.respawn===1&&c.crashes===1));
 });
 
+
+test('All tyre types tolerate moderate corner speed on every lane, including spline spikes',()=>{
+ for(const t of TRACKS)for(const lane of [0,1])for(const tyre of ['soft','medium','hard']){
+  const r=newRace(t.id,[{id:'a',name:'A',lane,tyre}]);r.status='racing';const c=r.cars[0];
+  for(const p of lanesFor(t.id)[lane].samples){c.distance=p.d;c.speed=70;c.input=0;step(r,1/120);assert.equal(c.respawn,0,t.id+' '+lane+' '+tyre+' at '+p.d);}
+ }
+});
+
