@@ -6,8 +6,9 @@ import {Tabs,TabsList,TabsTrigger,TabsContent} from '@/components/ui/tabs';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/ui/dialog';
 import RaceCanvas from '@/components/race-canvas';
 import {Race,newRace,advance,botInput,TRACKS,TYRES,formatTime,lanesFor} from '@/lib/race';
+import {firebaseAuth,googleProvider,signInWithPopup,signOut,onAuthStateChanged} from '@/lib/firebase-client';
 const cities=['Global','București','Cluj','Iași','Timișoara','Constanța'];
-async function api(action:string,data:Record<string,unknown>={}){const r=await fetch('/api/game',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,...data})});const b:any=await r.json();if(!r.ok)throw new Error(b.error||'Conexiunea a fost întreruptă.');return b;}
+async function api(action:string,data:Record<string,unknown>={}){const token=await firebaseAuth.currentUser?.getIdToken();const r=await fetch('/api/game',{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},body:JSON.stringify({action,...data})});const b:any=await r.json();if(!r.ok)throw new Error(b.error||'Conexiunea a fost întreruptă.');return b;}
 const initial=()=>({...newRace('ring',[{id:'you',name:'Tu',lane:0,tyre:'medium'}]),status:'ready' as const});
 export default function Paddock(){
  const [tab,setTab]=useState('race'),[track,setTrack]=useState('ring'),[tyre,setTyre]=useState('medium'),[lane,setLane]=useState(0),[mode,setMode]=useState('solo');
@@ -17,7 +18,8 @@ export default function Paddock(){
  const [pilotView,setPilotView]=useState<any>(null);
  const [createOpen,setCreateOpen]=useState(false),[tForm,setTForm]=useState({name:'',track:'ring',starts:'',max:'8',rules:'8 tururi · Dueluri eliminatorii · +3 / −3 puncte'}),[seasonName,setSeasonName]=useState(''),[muted,setMuted]=useState(true);
  const audio=useRef<{ctx:AudioContext;osc:OscillatorNode;gain:GainNode}|null>(null),mutedRef=useRef(true);
- const refresh=useCallback(async()=>{try{const r=await fetch('/api/game');const b:any=await r.json();if(!r.ok)throw new Error(b.error);setLobby(b);meRef.current=b.me;setError('');if(b.activeRoom&&!net.current){net.current=b.activeRoom;setRoom(b.activeRoom);setTab('race');}}catch(e:any){setError(e.message||'Serviciul online nu răspunde.');}},[]);
+ const refresh=useCallback(async()=>{try{const token=await firebaseAuth.currentUser?.getIdToken();const r=await fetch('/api/game',{headers:token?{Authorization:`Bearer ${token}`}:{}});const b:any=await r.json();if(!r.ok)throw new Error(b.error);setLobby(b);meRef.current=b.me;setError('');if(b.activeRoom&&!net.current){net.current=b.activeRoom;setRoom(b.activeRoom);setTab('race');}}catch(e:any){setError(e.message||'Serviciul online nu răspunde.');}},[]);
+ useEffect(()=>onAuthStateChanged(firebaseAuth,()=>void refresh()),[refresh]);
  useEffect(()=>{void refresh();const timer=setInterval(refresh,3500);return()=>clearInterval(timer);},[refresh]);
  const run=async(fn:()=>Promise<any>,success?:string)=>{setBusy(true);setNotice('');try{await fn();if(success)setNotice(success);await refresh();return true;}catch(e:any){setNotice(e.message);return false;}finally{setBusy(false);}};
  useEffect(()=>{let frame=0,last=0,draw=0;function tick(now:number){const dt=Math.min((now-last)/1000||0,.05);last=now;const r=state.current,c=r.cars.find(c=>c.id===meRef.current?.id)||r.cars[0];
@@ -40,7 +42,7 @@ export default function Paddock(){
  const ordered=[...race.cars].sort((a,b)=>b.distance/lanesFor(race.track)[b.lane].length-a.distance/lanesFor(race.track)[a.lane].length),isDuel=race.cars.some(c=>c.id!=='you'&&c.id!=='bot');
  const ranking=rank==='season'?lobby?.standings:rank==='tournament'?[...(lobby?.players||[])].map((p:any)=>({...p,points:(lobby?.tournaments||[]).filter((t:any)=>t.winner===p.id).length})).sort((a,b)=>b.points-a.points):lobby?.players;
  const invites=lobby?.invitations||[];
- return <main className="app"><header className="topbar"><a href="/" className="brand"><span className="brand-mark"><Flag size={23}/></span><span><strong>MICHELIN</strong><small>RACE CHALLENGE</small></span></a><span className="edition">THE PADDOCK <span>/</span> RECONSTRUIT</span><div className="header-right">{me?<><span className="status-dot"/>{me.name}<button className="avatar" onClick={openProfile} aria-label="Editează profilul">{me.avatar}</button></>:<a href="/signin-with-chatgpt?return_to=/" target="_top" className="signin"><LogIn size={16}/>Conectare</a>}</div></header>
+ return <main className="app"><header className="topbar"><a href="/" className="brand"><span className="brand-mark"><Flag size={23}/></span><span><strong>MICHELIN</strong><small>RACE CHALLENGE</small></span></a><span className="edition">THE PADDOCK <span>/</span> RECONSTRUIT</span><div className="header-right">{me?<><span className="status-dot"/>{me.name}<button className="avatar" onClick={openProfile} aria-label="Editează profilul">{me.avatar}</button><button className="signin" onClick={()=>void signOut(firebaseAuth)}>Ieșire</button></>:<button className="signin" onClick={()=>void signInWithPopup(firebaseAuth,googleProvider)}><LogIn size={16}/>Conectare Google</button>}</div></header>
  <div className="workspace"><div className="page-heading"><div><div className="eyebrow">BUN VENIT ÎN PADDOCK</div><h1>Fiecare viraj contează<span>.</span></h1></div><span className="season-label"><Flag size={15}/>{lobby?.season?.name||'SEZONUL 01'}</span></div>
  {error&&<div className="online-notice" role="status">{error} <button onClick={refresh}>Reîncearcă</button></div>}
  {notice&&<div className="notice" role="status">{notice}<button onClick={()=>setNotice('')} aria-label="Închide notificarea"><X size={15}/></button></div>}
