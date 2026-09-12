@@ -1,0 +1,14 @@
+{
+  "name": "racechallenge-api",
+  "main": "dist/server/index.js",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "no_bundle": true,
+  "rules": [{"type": "ESModule", "globs": ["**/*.js", "**/*.mjs"]}],
+  "assets": {"directory": "dist/client"},
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "racechallenge-db",
+    "database_id": "4dbe9eac-2d22-4228-ba3d-8905edf22fef"
+  }]
+}
